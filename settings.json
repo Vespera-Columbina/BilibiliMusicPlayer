@@ -1,0 +1,17 @@
+{
+  "browser": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  "cookie": "",
+  "min_dur": 60,
+  "max_dur": 900,
+  "auto_next": true,
+  "match_mode": "搜索结果第一首",
+  "shuffle_count": 2,
+  "shuffle_video": true,
+  "video_path": "",
+  "port": 9222,
+  "glass": true,
+  "alpha": 0.96,
+  "tint_alpha": 235,
+  "solid_bg": true,
+  "last_playlist": ""
+}

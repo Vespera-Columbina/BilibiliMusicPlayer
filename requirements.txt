@@ -1,0 +1,5 @@
+requests>=2.31.0
+websocket-client>=1.6.0
+# 抽选动画（全屏播放 video.mp4）需要下面两个，缺失时会自动退回列表闪动动画
+opencv-python>=4.8.0
+pillow>=10.0.0
