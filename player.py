@@ -450,11 +450,13 @@ class BiliPlayer:
             self._closed_fired = True
             self._seek_to = 0.0
             self._user_paused = False
+            # 停止时直接关闭浏览器窗口，而不是停在 about:blank 空白页
             if self.browser and self.browser.running:
                 try:
-                    self.browser.navigate("about:blank")
+                    self.browser.shutdown()
                 except Exception:
                     pass
+                self.browser = None
 
     def bring_front(self) -> bool:
         """手动把播放页面拉回前台。"""

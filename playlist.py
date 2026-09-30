@@ -18,6 +18,7 @@ from typing import List, Optional
 
 SEPARATORS = (" - ", " – ", " — ", " -- ", "-")
 ORDER_RE = re.compile(r"^\d+\s*[.、)）]\s*")
+WEIGHT_RE = re.compile(r"\s*@(\d+(?:\.\d+)?)\s*$")   # 末尾 @权重，如「歌名 - 歌手 @3」
 
 
 @dataclass
@@ -26,6 +27,8 @@ class Song:
     artist: str = ""
     bvid: str = ""          # 已选定的 BV 号（空表示交给自动匹配）
     picked: str = ""        # 已选定的视频标题
+    uid: int = 0            # 运行期唯一编号：同名歌曲互不影响（不写入文件）
+    weight: float = 1.0     # 爆率权重：抽选时高权重更易被抽到（歌单里用「@权重」标注）
 
     @property
     def display(self) -> str:
@@ -36,22 +39,31 @@ class Song:
         return f"{self.name} {self.artist}".strip()
 
     def to_line(self) -> str:
-        return f"{self.name} - {self.artist}" if self.artist else self.name
+        base = f"{self.name} - {self.artist}" if self.artist else self.name
+        return f"{base} @{self.weight:g}" if self.weight and self.weight != 1.0 else base
 
 
 def parse_line(line: str) -> Optional[Song]:
-    """把一行文本解析成 Song，默认格式为「歌名 - 歌手」。"""
+    """把一行文本解析成 Song，默认格式为「歌名 - 歌手」；行尾 @权重 表示爆率权重。"""
     text = line.strip()
     if not text or text.startswith("#"):
         return None
+    weight = 1.0
+    m = WEIGHT_RE.search(text)
+    if m:
+        try:
+            weight = float(m.group(1))
+        except ValueError:
+            weight = 1.0
+        text = text[:m.start()].strip()
     text = ORDER_RE.sub("", text).strip()
     for sep in SEPARATORS:
         if sep in text:
             left, right = text.split(sep, 1)
             left, right = left.strip(), right.strip()
             if left and right:
-                return Song(name=left, artist=right)
-    return Song(name=text)
+                return Song(name=left, artist=right, weight=weight)
+    return Song(name=text, weight=weight)
 
 
 def _read_text(path: str) -> List[str]:
@@ -97,9 +109,15 @@ def _load_csv(path: str) -> List[Song]:
         if cells[0].lower() in ("name", "title", "歌曲", "歌曲名", "歌名", "标题"):
             continue
         artist = cells[1] if len(cells) > 1 else ""
-        if len(cells) > 2 and not artist:
-            artist = cells[2]
-        songs.append(Song(name=cells[0], artist=artist))
+        weight = 1.0
+        if len(cells) > 2:
+            try:
+                weight = float(cells[2])
+            except ValueError:
+                if not artist:
+                    artist = cells[2]
+                weight = 1.0
+        songs.append(Song(name=cells[0], artist=artist, weight=weight))
     return songs
 
 
@@ -116,6 +134,7 @@ def _load_json(path: str) -> List[Song]:
             song = Song(
                 name=str(item.get("name") or item.get("title") or item.get("song") or "").strip(),
                 artist=str(item.get("artist") or item.get("singer") or item.get("author") or "").strip(),
+                weight=float(item.get("weight") or 1.0),
             )
         else:
             continue
@@ -140,18 +159,46 @@ def load_playlist(path: str) -> List[Song]:
     return songs
 
 
+def dedupe_songs(songs: List[Song]) -> List[Song]:
+    """合并歌单里的重复歌曲（同名同歌手视为同一首），累加权重，保留首次出现。
+
+    仅运行时去重，不修改歌单文件；无名歌曲不参与去重。
+    """
+    seen: dict = {}
+    result: List[Song] = []
+    for s in songs:
+        key = (s.name.strip().lower(), s.artist.strip().lower())
+        if not key[0]:
+            result.append(s)
+            continue
+        kept = seen.get(key)
+        if kept is None:
+            seen[key] = s
+            result.append(s)
+        else:
+            kept.weight = (kept.weight or 0.0) + (s.weight or 0.0)
+    return result
+
+
+def _plain(song: Song) -> dict:
+    """去掉运行期字段（uid），只保存歌单本身的信息。"""
+    data = asdict(song)
+    data.pop("uid", None)
+    return data
+
+
 def save_playlist(path: str, songs: List[Song]) -> None:
     ext = os.path.splitext(path)[1].lower()
     if ext == ".json":
         with open(path, "w", encoding="utf-8") as f:
-            json.dump([asdict(s) for s in songs], f, ensure_ascii=False, indent=2)
+            json.dump([_plain(s) for s in songs], f, ensure_ascii=False, indent=2)
         return
     if ext == ".csv":
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["name", "artist"])
+            writer.writerow(["name", "artist", "weight"])
             for s in songs:
-                writer.writerow([s.name, s.artist])
+                writer.writerow([s.name, s.artist, s.weight])
         return
     with open(path, "w", encoding="utf-8") as f:
         for s in songs:

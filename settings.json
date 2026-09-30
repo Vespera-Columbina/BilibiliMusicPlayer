@@ -6,12 +6,58 @@
   "auto_next": true,
   "match_mode": "搜索结果第一首",
   "shuffle_count": 2,
-  "shuffle_video": true,
+  "shuffle_video": false,
+  "no_repeat": true,
+  "remember_undrawn": true,
+  "timer_minutes": 60,
+  "timer_action": "停止播放",
+  "timer_wait_current": true,
+  "drawn": [
+    "69|心动",
+    "150|If you",
+    "177|鸡霸",
+    "153|相思遥",
+    "79|海阔天空",
+    "146|TOO BAD"
+  ],
+  "weight_mode": true,
+  "pity": false,
+  "pity_scale": 1.0,
+  "dedupe": true,
+  "draw_stats": {
+    "69": {
+      "count": 1,
+      "last": 1790774075.5199444
+    },
+    "150": {
+      "count": 1,
+      "last": 1790774075.5199444
+    },
+    "177": {
+      "count": 1,
+      "last": 1790774081.9430718
+    },
+    "153": {
+      "count": 1,
+      "last": 1790774081.9430718
+    },
+    "79": {
+      "count": 1,
+      "last": 1790774085.744743
+    },
+    "146": {
+      "count": 1,
+      "last": 1790774085.744743
+    }
+  },
+  "auto_remove": false,
   "video_path": "",
   "port": 9222,
   "glass": true,
   "alpha": 0.96,
   "tint_alpha": 235,
   "solid_bg": true,
+  "win_geom": "1263x958+1382+127",
+  "sash_pos": 491,
   "last_playlist": ""
 }

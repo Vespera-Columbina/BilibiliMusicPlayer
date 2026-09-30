@@ -48,6 +48,84 @@ DWMSBT_TABBEDWINDOW = 4
 WCA_ACCENT_POLICY = 19
 
 
+SM_XVIRTUALSCREEN = 76
+SM_YVIRTUALSCREEN = 77
+SM_CXVIRTUALSCREEN = 78
+SM_CYVIRTUALSCREEN = 79
+SPI_GETWORKAREA = 0x0030
+
+
+class _Rect(ctypes.Structure):
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+
+def enable_dpi_awareness() -> None:
+    """让窗口在高分屏上按真实 DPI 渲染（必须在创建任何 Tk 窗口之前调用）。
+
+    不做这一步，Windows 会把整个窗口位图拉伸，界面发虚、尺寸也不对。
+    """
+    if not IS_WINDOWS:
+        return
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)   # PER_MONITOR_DPI_AWARE
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+def work_area() -> tuple:
+    """主屏工作区（排除任务栏）：(x, y, width, height)。"""
+    if IS_WINDOWS:
+        try:
+            rect = _Rect()
+            if ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0,
+                                                          ctypes.byref(rect), 0):
+                return (rect.left, rect.top,
+                        max(320, rect.right - rect.left),
+                        max(240, rect.bottom - rect.top))
+        except Exception:
+            pass
+    try:
+        user32 = ctypes.windll.user32
+        return (0, 0, max(320, user32.GetSystemMetrics(0)),
+                max(240, user32.GetSystemMetrics(1)))
+    except Exception:
+        return (0, 0, 1280, 720)
+
+
+def virtual_screen() -> tuple:
+    """整个虚拟屏幕（多显示器合并）：(x, y, width, height)。"""
+    if IS_WINDOWS:
+        try:
+            user32 = ctypes.windll.user32
+            x = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+            y = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+            w = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+            h = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+            if w > 0 and h > 0:
+                return (x, y, w, h)
+        except Exception:
+            pass
+    return work_area()
+
+
+def apply_tk_scaling(root) -> float:
+    """按屏幕 DPI 设置 Tk 的 pt→px 缩放，返回实际 DPI 缩放比。"""
+    try:
+        dpi = root.winfo_fpixels("1i")
+        if dpi and dpi > 0:
+            root.tk.call("tk", "scaling", dpi / 72.0)   # scaling = 每 point 的像素数
+            return max(1.0, dpi / 96.0)
+    except Exception:
+        pass
+    return 1.0
+
+
 class _AccentPolicy(ctypes.Structure):
     _fields_ = [("AccentState", ctypes.c_int),
                 ("AccentFlags", ctypes.c_int),
@@ -288,6 +366,14 @@ def setup_style(root, glass: bool = True) -> None:
     root.option_add("*TCombobox*Listbox.selectForeground", "black")
     root.option_add("*TCombobox*Listbox.selectBackground", "#ccd2e0")
     root.option_add("*TCombobox*Listbox.font", (FONT, 9))
+
+    # 可拖动分隔条：加粗一点，方便抓住调整上下两块高度
+    style.configure("TPanedwindow", background=bg_key)
+    try:
+        style.configure("Sash", sashthickness=8, gripcount=8, gripmargin=2,
+                        background=PANEL_HI, borderwidth=0)
+    except Exception:
+        pass
 
     # 设置窗口用的分页
     style.configure("TNotebook", background=bg_key, borderwidth=0, tabmargins=(2, 4, 2, 0))
