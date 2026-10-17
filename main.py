@@ -73,7 +73,7 @@ class App(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Bilibili 歌单自动播放器")
+        self.title("BilibiliMusicPlayer")
         # 按屏幕 DPI 缩放，高分屏下字体与控件才不会过小/发虚
         self._scale = ui_theme.apply_tk_scaling(self)
 
@@ -171,13 +171,20 @@ class App(tk.Tk):
         self.geometry(f"{width}x{height}+{wa_x + (wa_w - width) // 2}"
                       f"+{wa_y + (wa_h - height) // 2}")
 
-    def _restore_sash(self) -> None:
-        """恢复上次拖动出来的分区比例；没有记录时给一个默认比例（抽选区约 170px）。"""
+    def _restore_sash(self, tries: int = 0) -> None:
+        """默认让「搜索结果」与「抽选结果」上下平分；用户拖动后记住其位置。
+
+        窗口真正显示后布局才稳定，早期 winfo_height 可能还是 1；
+        高度不够时稍后重试，避免停在 PanedWindow 的默认分配（上大下小）。
+        """
         try:
+            self.update_idletasks()
             total = self.right_pane.winfo_height()
-            if total < 200:
+            if total < 2 * self.PANE_MIN_SEARCH:
+                if tries < 15:
+                    self.after(120, lambda: self._restore_sash(tries + 1))
                 return
-            default = max(self.PANE_MIN_SEARCH, total - 170)
+            default = total // 2          # 默认两块平分
             target = self._saved_sash or default
             pos = max(self.PANE_MIN_SEARCH,
                       min(target, total - self.PANE_MIN_PICK))
@@ -207,8 +214,13 @@ class App(tk.Tk):
                 pos_y + height < vy + 40 or pos_y > vy + vh - 40):
             return False
         _, _, wa_w, wa_h = ui_theme.work_area()
-        width = min(width, max(640, wa_w - 40))
+        fit_w = max(880, min(1180, wa_w - 80))   # 与首次自适应一致的目标尺寸
+        fit_h = max(560, min(760, wa_h - 80))
+        width = min(width, max(640, wa_w - 40))    # 不超出当前屏幕
         height = min(height, max(420, wa_h - 40))
+        # 至少恢复到「与当前屏幕相称」的大小，避免降低分辨率/换显示器后窗口变得特别小
+        width = max(width, min(fit_w, wa_w - 40))
+        height = max(height, min(fit_h, wa_h - 40))
         self.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
         return True
 
@@ -354,8 +366,9 @@ class App(tk.Tk):
 
         # 右侧：搜索结果 与 抽选结果 分成两块，中间可拖动分隔条调整各自高度
         # 用原生 PanedWindow：它支持 minsize 与把手，ttk 版本不支持
-        right = tk.PanedWindow(body, orient="vertical", sashwidth=8,
-                               sashrelief="flat", showhandle=True,
+        right = tk.PanedWindow(body, orient="vertical", sashwidth=10,
+                               sashrelief="raised", showhandle=True,
+                               sashcursor="sb_v_double_arrow",
                                bg=ui_theme.PANEL_HI)
         right.grid(row=0, column=1, sticky="nsew")
         self.right_pane = right
@@ -382,7 +395,7 @@ class App(tk.Tk):
         pick = ttk.LabelFrame(right, text=" 抽选结果（双击播放） ", padding=6)
         pick.rowconfigure(0, weight=1)
         pick.columnconfigure(0, weight=1)
-        right.add(pick, minsize=self.PANE_MIN_PICK, stretch="never")
+        right.add(pick, minsize=self.PANE_MIN_PICK, stretch="always")
 
         self.shuffle_list = tk.Listbox(pick, **ui_theme.listbox_kwargs())
         self.shuffle_list.grid(row=0, column=0, sticky="nsew")
@@ -753,7 +766,7 @@ class App(tk.Tk):
         self.tint_var.set(str(data.get("tint_alpha", 235)))
         self.solid_var.set(bool(data.get("solid_bg", True)))
         self._saved_geom = str(data.get("win_geom", ""))
-        self._saved_sash = self._int(data.get("sash_pos", 0), 0)
+        self._saved_sash = 0      # 默认两块平分；拖动后由 _save_sash 记住（不读旧值）
         if self.cookie_var.get():
             self.searcher.set_cookie(self.cookie_var.get())
         # 恢复上次记录的「已抽过」：uid 与歌名都对得上才算，歌单改过就自动失效
@@ -941,8 +954,18 @@ class App(tk.Tk):
         self.search_var.set("")      # 导入后显示完整歌单
         self._set_songs(songs)
         self._last_playlist = path
-        self.status_var.set(f"已导入 {len(songs)} 首：{os.path.basename(path)}")
+        # 带爆率权重的歌单（如网页面板导出的 .json）：自动按爆率抽选
+        rated = any((getattr(s, "weight", 1.0) or 0) not in (0.0, 1.0) for s in songs)
+        if rated and not self.weight_mode_var.get():
+            self.weight_mode_var.set(True)
+            self.logger.info("⚖ 检测到爆率权重，已自动开启按爆率抽选")
+        extra = "（含爆率权重，按爆率抽选）" if rated else ""
+        self.status_var.set(f"已导入 {len(songs)} 首{extra}：{os.path.basename(path)}")
         self._save_settings()
+        # 含 BV 绑定的歌单：视频已确定、无需搜索，直接开始自动连播
+        if any(getattr(s, "bvid", "") for s in songs):
+            self.logger.info("▶ 检测到 BV 绑定，自动开始连播")
+            self.after(50, self._autoplay_bound)
 
     def _add_song(self) -> None:
         text = simpledialog.askstring("添加歌曲", "格式：歌名 - 歌手（歌手可省略）")
@@ -1186,6 +1209,11 @@ class App(tk.Tk):
                         f"某一首开始播放，或点「▶ 播放抽选结果」按顺序连播")
         self.now_var.set(f"🎲 已抽中 {len(keys)} 首，请选择要播放的歌")
         self._prefetch_shuffle(list(keys))   # 后台先搜好，选了就能立刻播
+        # 抽中的歌里有 BV 绑定：自动开播（BV 直连播放，无需搜索等待、无需再手动点）
+        if any(0 <= self._index_of(k) < len(self.songs) and self.songs[self._index_of(k)].bvid
+               for k in keys):
+            self.set_status("抽中的歌曲含 BV 绑定，自动开始连播…")
+            self.after(60, self._play_shuffle_queue)
 
     def _prefetch_shuffle(self, keys: List[str]) -> None:
         """抽选后先后台搜索这几首（只展示结果，不播放），选中的时候就不用再等。"""
@@ -1292,6 +1320,13 @@ class App(tk.Tk):
         self._set_queue(keys, "队列")
         self.set_status(f"队列播放：从第 {start + 1} 首开始，共 {len(self.queue)} 首")
         self._play_queue_key(keys[0])
+
+    def _autoplay_bound(self) -> None:
+        """导入含 BV 绑定的歌单后：从第一首开始自动连播（BV 直连播放，其余搜索后播）。"""
+        if not self.songs:
+            return
+        self.current_index = -1
+        self._start_queue_play()
 
     def _next_queue_key(self) -> Optional[str]:
         """取队列里的下一首（已被移除的自动跳过）。"""
@@ -1483,6 +1518,15 @@ class App(tk.Tk):
         cached = self._pick_videos.get(song.display)
 
         def work():
+            if song.bvid:           # 绑定了 BV 号：优先直接播放该 URL，不联网搜索
+                bound = Video(bvid=song.bvid,
+                              title=f"📌 已绑定 {song.bvid}", author="", duration=0)
+                if seq != self._search_seq or index != self.current_index:
+                    return
+                self._post(lambda: self._fill_results(self._key_of(song),
+                                                      [bound], bound, mode))
+                self._start_video(index, bound)
+                return
             videos = cached
             if videos is None:      # 抽选时已预搜索过就不必再搜
                 try:
@@ -1495,7 +1539,10 @@ class App(tk.Tk):
             # 默认播放搜索列表第一首；切到「智能最佳匹配」时才按打分挑
             chosen = videos[0] if (mode != MATCH_BEST and videos) else \
                 pick_best(videos, song.name, song.artist, min_dur, max_dur)
-            self._post(lambda: self._fill_results(index, videos, chosen, mode))
+            # 注意：owner_key 必须是「歌曲键」，不能传歌单下标(index)，否则
+            # results_owner 类型不对，_index_of 找不到，双击就换不了同首歌的其它视频
+            self._post(lambda: self._fill_results(self._key_of(song),
+                                                  videos, chosen, mode))
             if chosen:
                 self._start_video(index, chosen)
 
@@ -1562,7 +1609,9 @@ class App(tk.Tk):
                 self._set_queue(list(self._shuffle_picks), "抽选")
                 self.queue_pos = self._shuffle_picks.index(owner)
                 self._refresh_shuffle_list()
-        self._start_video(index, self.results[sel[0]])
+        video = self.results[sel[0]]
+        # 与 play_index 一致：先确保浏览器就绪（用设置里的浏览器路径、异步启动不卡界面），再播放
+        self._ensure_browser(lambda: self._start_video(index, video))
 
     def _open_in_web(self) -> None:
         sel = self.result_list.curselection()

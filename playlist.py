@@ -19,6 +19,7 @@ from typing import List, Optional
 SEPARATORS = (" - ", " – ", " — ", " -- ", "-")
 ORDER_RE = re.compile(r"^\d+\s*[.、)）]\s*")
 WEIGHT_RE = re.compile(r"\s*@(\d+(?:\.\d+)?)\s*$")   # 末尾 @权重，如「歌名 - 歌手 @3」
+BV_RE = re.compile(r"^BV[0-9A-Za-z]{10}$", re.I)     # BV 号，如 BV1xx411c7mD
 
 
 @dataclass
@@ -100,30 +101,37 @@ def _load_m3u(lines: List[str]) -> List[Song]:
 
 def _load_csv(path: str) -> List[Song]:
     songs: List[Song] = []
-    with open(path, "r", encoding="utf-8-sig", newline="") as f:
-        rows = list(csv.reader(f))
+    rows = list(csv.reader(_read_text(path)))   # 多编码读取，兼容 GBK/ANSI 的 CSV
     for row in rows:
         if not row or not any(c.strip() for c in row):
             continue
         cells = [c.strip() for c in row]
         if cells[0].lower() in ("name", "title", "歌曲", "歌曲名", "歌名", "标题"):
             continue
-        artist = cells[1] if len(cells) > 1 else ""
+        name = cells[0]
+        bvid = ""
+        artist = ""
+        if len(cells) > 1:
+            col2 = cells[1]
+            if BV_RE.match(col2):          # 第二列是 BV 号 → 绑定该视频（BV 号大小写敏感，保留原样）
+                bvid = col2
+            else:
+                artist = col2
         weight = 1.0
         if len(cells) > 2:
             try:
                 weight = float(cells[2])
             except ValueError:
-                if not artist:
+                if not artist and not bvid:
                     artist = cells[2]
                 weight = 1.0
-        songs.append(Song(name=cells[0], artist=artist, weight=weight))
+        songs.append(Song(name=name, artist=artist, bvid=bvid, weight=weight))
     return songs
 
 
 def _load_json(path: str) -> List[Song]:
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    text = "\n".join(_read_text(path))       # 多编码读取，兼容非 UTF-8 的 JSON
+    data = json.loads(text) if text.strip() else []
     if isinstance(data, dict):
         data = data.get("songs") or data.get("playlist") or data.get("list") or []
     songs: List[Song] = []
@@ -134,6 +142,7 @@ def _load_json(path: str) -> List[Song]:
             song = Song(
                 name=str(item.get("name") or item.get("title") or item.get("song") or "").strip(),
                 artist=str(item.get("artist") or item.get("singer") or item.get("author") or "").strip(),
+                bvid=str(item.get("bvid") or item.get("bv") or "").strip(),
                 weight=float(item.get("weight") or 1.0),
             )
         else:
