@@ -628,15 +628,6 @@ class BiliPlayer:
             return
         self._missing = 0
 
-        # 换歌瞬间：页面还停在上一首（或正在跳转）。此时旧视频可能是 ended / paused，
-        # 绝不能拿它误判「本首播完」或去点播放，否则连播会连跳好几首、切不到想听的歌。
-        try:
-            href = self.browser.evaluate(JS_URL) or ""
-        except Exception:
-            href = ""
-        if href and bvid not in href:
-            return
-
         if not self._loaded:
             self._loaded = True
             self._kicks = 0

@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BilibiliMusicPlayer</title>
+<style>
+  :root{
+    --accent:#fb7299; --accent-d:#e85d87; --accent-2:#00aeec;
+    --bg:#eef0f6; --panel:#ffffff; --panel-2:#f7f8fc; --line:#e4e7f0;
+    --fg:#1c1f28; --sub:#6b7288; --dup:#fff3cd; --danger:#e5484d; --ok:#18a058;
+    --radius:14px; --shadow-sm:0 2px 8px rgba(28,31,40,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Microsoft YaHei UI","PingFang SC",system-ui,-apple-system,sans-serif;
+       background:var(--bg);color:var(--fg);font-size:14px;-webkit-font-smoothing:antialiased}
+  ::selection{background:var(--accent);color:#fff}
+
+  .wrap{padding:18px 20px 60px;max-width:1120px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+        padding:16px 18px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
+  .card h2{margin:0 0 12px;font-size:13px;color:var(--sub);font-weight:600;letter-spacing:.3px}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .row+.row{margin-top:12px}
+  .grow{flex:1}
+
+  button{cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--fg);
+         border-radius:10px;padding:8px 14px;font-size:13px;font-family:inherit;
+         transition:.16s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  button:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+  button:active{transform:translateY(0)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;
+                 box-shadow:0 4px 12px rgba(251,114,153,.32)}
+  button.primary:hover{background:var(--accent-d);color:#fff}
+  button.blue{background:var(--accent-2);border-color:var(--accent-2);color:#fff;
+              box-shadow:0 4px 12px rgba(0,174,236,.28)}
+  button.blue:hover{filter:brightness(1.06);color:#fff}
+  button.ghost{background:var(--panel-2)}
+  button.danger:hover{border-color:var(--danger);color:var(--danger)}
+
+  .switch{display:inline-flex;align-items:center;gap:9px;cursor:pointer;user-select:none;
+          background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:7px 14px 7px 10px}
+  .switch input{display:none}
+  .switch .track{width:38px;height:22px;border-radius:999px;background:#cfd4e2;position:relative;transition:.2s}
+  .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;
+                        border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .switch input:checked + .track{background:var(--accent)}
+  .switch input:checked + .track::after{left:18px}
+  .switch .lbl{font-size:13px}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+        padding:14px 16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:2px}
+  .stat .n{font-size:24px;font-weight:700;letter-spacing:.5px}
+  .stat .l{font-size:12px;color:var(--sub)}
+  .stat.a .n{color:var(--accent)} .stat.b .n{color:var(--accent-2)}
+  .stat.g .n{color:var(--ok)} .stat.y .n{color:#d9a406}
+
+  /* 饼图 */
+  .pie-card{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+  .pie-box{flex:0 0 190px;display:grid;place-items:center}
+  .pie-box svg{width:190px;height:190px}
+  .pie-box .center-n{font-size:22px;font-weight:700;fill:var(--fg)}
+  .pie-box .center-l{font-size:11px;fill:var(--sub)}
+  .legend{flex:1;min-width:240px;max-height:190px;overflow:auto;padding-right:4px}
+  .legend-item{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:8px;font-size:12.5px}
+  .legend-item:hover{background:var(--panel-2)}
+  .legend-item .sw{width:12px;height:12px;border-radius:3px;flex:0 0 12px}
+  .legend-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .legend-item .pc{color:var(--sub);font-variant-numeric:tabular-nums}
+
+  /* 导入切换 */
+  .tabs{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+  .tab{border:none;background:transparent;box-shadow:none;border-radius:9px;padding:7px 16px;color:var(--sub)}
+  .tab:hover{transform:none;color:var(--accent)}
+  .tab.active{background:#fff;color:var(--accent);box-shadow:var(--shadow-sm);font-weight:600}
+  .pane.hidden{display:none}
+  textarea{width:100%;min-height:96px;border:1px solid var(--line);border-radius:12px;
+           padding:10px 12px;font-family:inherit;font-size:13px;resize:vertical;background:var(--panel-2)}
+  textarea:focus{outline:none;border-color:var(--accent);background:#fff}
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;color:var(--sub);
+        background:var(--panel-2);transition:.15s}
+  .drop.over{border-color:var(--accent);background:#fff0f5;color:var(--accent)}
+  input[type=file]{font-size:13px}
+  .hint{color:var(--sub);font-size:12px;line-height:1.7}
+
+  .tablewrap{border:1px solid var(--line);border-radius:12px;overflow:auto;max-height:52vh}
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  th,td{padding:8px 10px;text-align:left;font-size:13px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--sub);font-weight:600;position:sticky;top:0;background:var(--panel);z-index:1}
+  tbody tr:nth-child(even){background:var(--panel-2)}
+  tbody tr:hover{background:#fff0f5}
+  tbody tr.dup{background:var(--dup)}
+  tbody tr.dup:hover{background:#ffe9a8}
+  td.idx{color:var(--sub);width:40px;text-align:right;font-variant-numeric:tabular-nums}
+  td .swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  input.cell{width:100%;border:1px solid transparent;border-radius:8px;padding:5px 8px;
+             font:inherit;background:transparent;transition:.15s}
+  input.cell:hover{background:#fff;border-color:var(--line)}
+  input.cell:focus{border-color:var(--accent);background:#fff;outline:none}
+  input.num{width:78px;text-align:right;border:1px solid var(--line);border-radius:8px;
+            padding:5px 8px;font:inherit;font-variant-numeric:tabular-nums}
+  input.num:focus{outline:none;border-color:var(--accent)}
+  input.bv{border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;width:118px}
+  input.bv:focus{outline:none;border-color:var(--accent-2)}
+  input.bv.bad{border-color:var(--danger);color:var(--danger);background:#fff0f0}
+  .bvcell{display:flex;align-items:center;gap:6px}
+  .bvgo{border:1px solid var(--line);background:#fff;border-radius:8px;width:28px;height:28px;
+        display:grid;place-items:center;color:var(--accent-2);padding:0}
+  .bvgo:hover{background:var(--accent-2);color:#fff;border-color:var(--accent-2)}
+  .bvgo[disabled]{opacity:.35;cursor:not-allowed}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;
+       background:#ffe1ea;color:#b3245b;margin-left:6px;font-weight:600}
+  .del{color:#c33;border-color:transparent;background:transparent;padding:4px 8px;border-radius:8px}
+  .del:hover{color:#fff;background:var(--danger);border-color:var(--danger)}
+
+  input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:22px;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;
+     background:linear-gradient(90deg,var(--accent),#ffd0dd)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+     background:#fff;border:3px solid var(--accent);margin-top:-5px;box-shadow:0 1px 4px rgba(0,0,0,.2);cursor:pointer}
+  input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:#ffd0dd}
+  input[type=range]::-moz-range-progress{height:6px;border-radius:999px;background:var(--accent)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;
+     border:3px solid var(--accent);cursor:pointer}
+
+  .sum{font-weight:700;font-variant-numeric:tabular-nums}
+  .sum.ok{color:var(--ok)} .sum.bad{color:var(--danger)}
+  .empty{color:var(--sub);text-align:center;padding:46px 0}
+  .empty .big{font-size:40px;margin-bottom:8px}
+
+  .toast{position:fixed;right:20px;bottom:20px;background:#1c1f28;color:#fff;
+         padding:11px 16px;border-radius:12px;font-size:13px;box-shadow:0 8px 26px rgba(0,0,0,.28);
+         opacity:0;transform:translateY(14px);transition:.28s;pointer-events:none;z-index:99;max-width:70%}
+  .toast.show{opacity:1;transform:translateY(0)}
+
+  @media (max-width:720px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .pie-box{flex:1 1 100%}
+    input[type=range]{width:110px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stats">
+    <div class="stat a"><span class="n" id="st-count">0</span><span class="l">歌曲数</span></div>
+    <div class="stat g"><span class="n" id="st-total">100%</span><span class="l">爆率总和</span></div>
+    <div class="stat y"><span class="n" id="st-dup">0</span><span class="l">重复歌曲</span></div>
+    <div class="stat b"><span class="n" id="st-bv">0</span><span class="l">BV 绑定</span></div>
+  </div>
+
+  <div class="card">
+    <h2>爆率分布</h2>
+    <div class="pie-card">
+      <div class="pie-box">
+        <svg id="pie" viewBox="0 0 120 120" role="img" aria-label="爆率饼图"></svg>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>① 导入歌单</h2>
+    <div class="row" style="margin-bottom:12px">
+      <div class="tabs">
+        <button id="tab-file" class="tab active" onclick="switchTab('file')">📁 上传文件</button>
+        <button id="tab-paste" class="tab" onclick="switchTab('paste')">📝 粘贴文字</button>
+      </div>
+    </div>
+    <div id="pane-file" class="pane">
+      <div class="drop" id="drop">
+        <div style="font-size:26px">📁</div>
+        <div style="margin:6px 0">把歌单文件拖到这里，或</div>
+        <input type="file" id="file" accept=".txt,.lst,.m3u,.m3u8,.csv,.json">
+        <div class="hint" style="margin-top:8px">支持 txt / lst / m3u / csv / json，自动识别 UTF-8 与 GBK/ANSI 编码</div>
+      </div>
+    </div>
+    <div id="pane-paste" class="pane hidden">
+      <textarea id="paste" placeholder="每行一首，支持两种写法：&#10;  夜曲 - 周杰伦 @3&#10;  夜曲, BV1xx411c7mD, 25   （第二列是 BV 号则绑定视频）"></textarea>
+      <div class="row">
+        <button class="primary" onclick="importPaste()">解析并载入</button>
+        <span class="hint">横线式：歌名 - 歌手 @权重；逗号式：歌名, BV号或歌手, 权重</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>② 调节爆率</h2>
+    <div class="row">
+      <button class="blue" onclick="dedupeMerge()">🔀 重复歌去重合并（爆率累加）</button>
+      <button class="ghost" onclick="normalize()">＝ 归一化到 100%</button>
+      <button class="ghost" onclick="equalize()">▦ 全部相同</button>
+      <button class="ghost danger" onclick="clearAll()">🗑 清空</button>
+      <span class="grow"></span>
+      <label class="switch"><input type="checkbox" id="sync" checked><span class="track"></span>
+        <span class="lbl">同步调节（调一首，其余按比例互补）</span></label>
+    </div>
+    <div class="row">
+      <span class="hint">爆率即抽选权重，数值越大越容易被抽到。开启「同步调节」时拉大某首、其余会按比例同步降低，总和恒为 100%。</span>
+      <span class="grow"></span>
+      <span class="hint">当前总和 <span id="sum" class="sum ok">100%</span></span>
+      <button class="primary" onclick="exportJSON()">⬇ 导出 playlist.json</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>③ 歌曲与爆率明细</h2>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="idx">#</th><th style="width:24%">歌名</th><th style="width:15%">歌手</th>
+            <th style="width:150px">BV号（可空）</th><th style="width:86px">爆率%</th><th>拖动</th><th style="width:44px"></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty"><div class="big">🎵</div>还没有歌曲，先在上方导入或粘贴歌单</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let songs = [];
+const $ = id => document.getElementById(id);
+const keyOf = s => (s.name||'').trim().toLowerCase() + '|' + (s.artist||'').trim().toLowerCase();
+const isBV = v => /^BV[0-9A-Za-z]{10}$/i.test((v||'').trim());
+const PALETTE = ['#fb7299','#00aeec','#18a058','#f5a623','#7c5cff','#ff6b6b',
+                 '#4ecdc4','#ffa502','#a55eea','#26de81','#fd9644','#45aaf2',
+                 '#eb3b5a','#0fb9b1','#fa8231','#3867d6'];
+const colorOf = i => PALETTE[i % PALETTE.length];
+
+let _toastT;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(_toastT); _toastT = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+function switchTab(which){
+  $('tab-file').classList.toggle('active', which === 'file');
+  $('tab-paste').classList.toggle('active', which === 'paste');
+  $('pane-file').classList.toggle('hidden', which !== 'file');
+  $('pane-paste').classList.toggle('hidden', which !== 'paste');
+}
+
+function parseLines(text){
+  const out = [];
+  for(let raw of String(text).split(/\r?\n/)){
+    let line = raw.trim();
+    if(!line || line.startsWith('#')) continue;
+    let name='', artist='', bvid='', weight=1.0;
+    if(line.indexOf(',') >= 0 || line.indexOf('，') >= 0){
+      const parts = line.split(/[,，]/).map(x=>x.trim());
+      name = parts[0]||'';
+      if(parts[1]){ isBV(parts[1]) ? (bvid = parts[1]) : (artist = parts[1]); }
+      if(parts[2] != null && parts[2] !== '' && !isNaN(parseFloat(parts[2]))) weight = parseFloat(parts[2]) || 1.0;
+    }else{
+      let t = line;
+      const m = t.match(/\s*@(\d+(?:\.\d+)?)\s*$/);
+      if(m){ weight = parseFloat(m[1]) || 1.0; t = t.slice(0, m.index).trim(); }
+      t = t.replace(/^\d+\s*[.、)）]\s*/, '').trim();
+      name = t;
+      for(const sep of [' - ',' – ',' — ',' -- ','-']){
+        const i = t.indexOf(sep);
+        if(i > 0){ name = t.slice(0,i).trim(); artist = t.slice(i+sep.length).trim(); break; }
+      }
+    }
+    if(name) out.push({name, artist, bvid, weight});
+  }
+  return out;
+}
+
+function loadSongs(list){
+  songs = list.map(s => ({name:s.name||'', artist:s.artist||'', bvid:s.bvid||s.bv||'', weight:(+s.weight||1.0)}));
+  const hasCustom = songs.some(s => Math.abs(s.weight-1.0) > 1e-9);
+  if(!hasCustom && songs.length){ const e = 100/songs.length; songs.forEach(s=>s.weight=e); }
+  normalize();
+  render();
+}
+
+function importPaste(){
+  const list = parseLines($('paste').value);
+  if(!list.length){ toast('没有解析到歌曲，请检查格式'); return; }
+  loadSongs(list);
+  toast('已载入 ' + list.length + ' 首');
+}
+
+function decodeSmart(buf){
+  try { return new TextDecoder('utf-8', {fatal:true}).decode(buf); }
+  catch(e){
+    for(const enc of ['gb18030','big5']){
+      try { return new TextDecoder(enc).decode(buf); }
+      catch(e2){}
+    }
+    return new TextDecoder('utf-8').decode(buf);
+  }
+}
+
+function readFile(f){
+  const rd = new FileReader();
+  rd.onload = () => {
+    const text = decodeSmart(rd.result);
+    let list = [];
+    try{
+      if(/\.json$/i.test(f.name)){
+        let data = JSON.parse(text);
+        if(data && !Array.isArray(data)) data = data.songs || data.playlist || data.list || [];
+        list = data.map(it => typeof it === 'string' ? parseLines(it)[0] : it)
+                   .filter(Boolean).map(it => ({name:it.name||it.title||'', artist:it.artist||it.singer||'', bvid:it.bvid||it.bv||'', weight:+it.weight||1.0}));
+      }else{
+        list = parseLines(text);
+      }
+    }catch(err){ toast('解析失败：' + err); return; }
+    if(!list.length){ toast('没有解析到歌曲'); return; }
+    loadSongs(list);
+    toast('已从文件载入 ' + list.length + ' 首');
+  };
+  rd.readAsArrayBuffer(f);
+}
+
+$('file').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if(f) readFile(f);
+  e.target.value = '';
+});
+
+// 拖拽导入
+const drop = $('drop');
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add('over');
+}));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove('over');
+}));
+drop.addEventListener('drop', e => {
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) readFile(f);
+});
+
+function total(){ return songs.reduce((a,s)=>a+(s.weight||0),0); }
+
+function setWeight(i, v){
+  v = Math.max(0, Math.min(100, +v || 0));
+  songs[i].weight = v;
+  if($('sync').checked){
+    const others = songs.map((_,idx)=>idx).filter(idx=>idx!==i);
+    const rest = 100 - v;
+    const cur = others.reduce((a,idx)=>a+(songs[idx].weight||0),0);
+    if(others.length){
+      if(cur > 1e-6){ for(const idx of others) songs[idx].weight = (songs[idx].weight||0)/cur*rest; }
+      else { for(const idx of others) songs[idx].weight = rest/others.length; }
+    }
+  }
+  render();
+}
+
+function normalize(){
+  const sum = total();
+  if(sum > 1e-6){ songs.forEach(s => s.weight = (s.weight||0)/sum*100); }
+  else if(songs.length){ const e = 100/songs.length; songs.forEach(s => s.weight = e); }
+}
+
+function equalize(){ if(songs.length){ const e = 100/songs.length; songs.forEach(s=>s.weight=e); render(); toast('已全部设为相同爆率'); } }
+
+function dedupeMerge(){
+  // 同名同歌手视为同一首：合并为 1 首、爆率累加，保留首次出现的位置
+  const seen = {};
+  const out = [];
+  let merged = 0;
+  for(const s of songs){
+    const k = keyOf(s);
+    if(!s.name){ out.push(s); continue; }             // 无名歌曲不参与去重
+    if(Object.prototype.hasOwnProperty.call(seen, k)){
+      seen[k].weight = (seen[k].weight||0) + (s.weight||0);   // 爆率累加
+      merged++;
+    }else{
+      const copy = {name:s.name, artist:s.artist, bvid:s.bvid, weight:(s.weight||0)};
+      seen[k] = copy;
+      out.push(copy);
+    }
+  }
+  songs = out;
+  normalize();
+  render();
+  toast(merged ? ('已合并 ' + merged + ' 首重复歌，爆率累加（现 ' + songs.length + ' 首）')
+               : '没有检测到重复歌曲');
+}
+
+function clearAll(){ songs = []; render(); }
+function del(i){ songs.splice(i,1); render(); }
+
+function openBV(i){
+  const bv = (songs[i].bvid||'').trim();
+  if(isBV(bv)) window.open('https://www.bilibili.com/video/' + bv, '_blank');
+}
+
+function exportJSON(){
+  if(!songs.length){ toast('还没有歌曲'); return; }
+  normalize();
+  const data = {
+    format: 'bili-rate-playlist', version: 1, generator: 'rate_panel',
+    songs: songs.map(s => ({name:s.name, artist:s.artist, bvid:(s.bvid||'').trim(),
+                            weight: Math.round((s.weight||0)*10000)/10000}))
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'playlist.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+  toast('已导出 playlist.json：在主程序点「导入歌单」选择它即按爆率抽选');
+}
+
+function render(){
+  const counts = {};
+  songs.forEach(s => { const k = keyOf(s); if(s.name) counts[k] = (counts[k]||0)+1; });
+  const dupNames = new Set(Object.keys(counts).filter(k=>counts[k]>1));
+  const bvCount = songs.filter(s => (s.bvid||'').trim()).length;
+  const tb = $('rows');
+  tb.innerHTML = '';
+  songs.forEach((s, i) => {
+    const dup = counts[keyOf(s)] > 1;
+    const tr = document.createElement('tr');
+    if(dup) tr.className = 'dup';
+    const w = (s.weight||0);
+    const bv = (s.bvid||'').trim();
+    const bvBad = bv && !isBV(bv);
+    tr.innerHTML =
+      '<td class="idx">' + (i+1) + '</td>' +
+      '<td><span class="swatch" style="background:' + colorOf(i) + '"></span>' +
+      '<input class="cell" type="text" value="' + esc(s.name) + '" onchange="songs[' + i + '].name=this.value;render()">' + (dup?'<span class="tag">重复×'+counts[keyOf(s)]+'</span>':'') + '</td>' +
+      '<td><input class="cell" type="text" value="' + esc(s.artist) + '" onchange="songs[' + i + '].artist=this.value;render()"></td>' +
+      '<td><div class="bvcell"><input class="bv' + (bvBad?' bad':'') + '" type="text" placeholder="BV号" value="' + esc(s.bvid) + '" onchange="songs[' + i + '].bvid=this.value.trim();render()">' +
+      '<button class="bvgo" title="在 B 站打开" ' + (bv&&!bvBad?'':'disabled') + ' onclick="openBV(' + i + ')">↗</button></div></td>' +
+      '<td><input class="num" type="number" min="0" max="100" step="0.0001" value="' + round4(w) + '" onchange="setWeight(' + i + ',this.value)"></td>' +
+      '<td><input type="range" min="0" max="100" step="0.01" value="' + round4(w) + '" ' +
+      'oninput="songs[' + i + '].weight=+this.value;syncRow(' + i + ',this.value)" ' +
+      'onchange="setWeight(' + i + ',this.value)"></td>' +
+      '<td><button class="del" onclick="del(' + i + ')">✕</button></td>';
+    tb.appendChild(tr);
+  });
+  $('empty').style.display = songs.length ? 'none' : 'block';
+  $('st-count').textContent = songs.length;
+  const t = total();
+  const st = $('st-total'); st.textContent = round4(t) + '%';
+  st.parentElement.className = 'stat ' + (Math.abs(t-100) < 0.05 ? 'g' : 'y');
+  $('st-dup').textContent = songs.filter(s => dupNames.has(keyOf(s))).length;
+  $('st-bv').textContent = bvCount;
+  const s = $('sum');
+  s.textContent = round4(t) + '%';
+  s.className = 'sum ' + (Math.abs(t-100) < 0.05 ? 'ok' : 'bad');
+  drawPie();
+}
+
+function syncRow(i, v){
+  const tr = $('rows').children[i];
+  if(tr){ const num = tr.querySelector('.num'); if(num) num.value = round4(v); }
+  const t = total(), s = $('sum');
+  s.textContent = round4(t) + '%';
+  s.className = 'sum ' + (Math.abs(t-100) < 0.05 ? 'ok' : 'bad');
+}
+
+// ---------- 饼图（纯 SVG 环形图） ----------
+function drawPie(){
+  const svg = $('pie');
+  const NS = 'http://www.w3.org/2000/svg';
+  const cx = 60, cy = 60, R = 56, r = 34;
+  svg.innerHTML = '';
+  const sum = total();
+  // 中心文字
+  const n = document.createElementNS(NS, 'text');
+  n.setAttribute('x', cx); n.setAttribute('y', cy - 2);
+  n.setAttribute('text-anchor', 'middle'); n.setAttribute('class', 'center-n');
+  n.textContent = songs.length;
+  const l = document.createElementNS(NS, 'text');
+  l.setAttribute('x', cx); l.setAttribute('y', cy + 14);
+  l.setAttribute('text-anchor', 'middle'); l.setAttribute('class', 'center-l');
+  l.textContent = '首歌曲';
+  svg.appendChild(n); svg.appendChild(l);
+
+  if(!songs.length || sum <= 0){
+    const ring = document.createElementNS(NS, 'circle');
+    ring.setAttribute('cx', cx); ring.setAttribute('cy', cy);
+    ring.setAttribute('fill', 'none'); ring.setAttribute('stroke', '#eceef5');
+    ring.setAttribute('stroke-width', (R - r));
+    svg.insertBefore(ring, n);
+    $('legend').innerHTML = '<div class="hint">导入歌单后显示爆率占比</div>';
+    return;
+  }
+  let angle = -Math.PI / 2;
+  songs.forEach((s, i) => {
+    const frac = (s.weight || 0) / sum;
+    if(frac <= 0) return;
+    const a0 = angle, a1 = angle + frac * Math.PI * 2;
+    angle = a1;
+    const large = (a1 - a0) > Math.PI ? 1 : 0;
+    const p = document.createElementNS(NS, 'path');
+    const x0o = cx + R*Math.cos(a0), y0o = cy + R*Math.sin(a0);
+    const x1o = cx + R*Math.cos(a1), y1o = cy + R*Math.sin(a1);
+    const x1i = cx + r*Math.cos(a1), y1i = cy + r*Math.sin(a1);
+    const x0i = cx + r*Math.cos(a0), y0i = cy + r*Math.sin(a0);
+    p.setAttribute('d', 'M' + x0o + ',' + y0o +
+      ' A' + R + ',' + R + ' 0 ' + large + ' 1 ' + x1o + ',' + y1o +
+      ' L' + x1i + ',' + y1i +
+      ' A' + r + ',' + r + ' 0 ' + large + ' 0 ' + x0i + ',' + y0i + ' Z');
+    p.setAttribute('fill', colorOf(i));
+    p.setAttribute('stroke', '#fff');
+    p.setAttribute('stroke-width', '0.6');
+    const ttl = document.createElementNS(NS, 'title');
+    ttl.textContent = (s.name + (s.artist ? ' - ' + s.artist : '')) + '  ' + (frac*100).toFixed(2) + '%';
+    p.appendChild(ttl);
+    svg.appendChild(p);
+  });
+  // 图例
+  const lg = $('legend');
+  lg.innerHTML = '';
+  const sorted = songs.map((s, i) => ({s, i, p: (s.weight||0)/sum*100}))
+                      .sort((a, b) => b.p - a.p);
+  sorted.forEach(({s, i, p}) => {
+    const div = document.createElement('div');
+    div.className = 'legend-item';
+    div.innerHTML = '<span class="sw" style="background:' + colorOf(i) + '"></span>' +
+      '<span class="nm">' + esc(i + 1 + '. ' + s.name + (s.artist ? ' - ' + s.artist : '')) + '</span>' +
+      '<span class="pc">' + p.toFixed(2) + '%</span>';
+    lg.appendChild(div);
+  });
+}
+
+function round4(x){ return Math.round((+x||0)*10000)/10000; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+render();
+</script>
+</body>
+</html>
